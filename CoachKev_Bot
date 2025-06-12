@@ -1,0 +1,224 @@
+import os
+import discord
+from discord.ext import commands
+from flask import Flask
+from threading import Thread
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+intents.members = True
+
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# ====== FLASK SERVER TO KEEP REPLIT ONLINE ======
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "CoachKev is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# ====== ROLE & COMMAND SETUP ======
+roles_data = {
+    "💰": "Legit Heists",
+    "🏍️": "Legit MC",
+    "🎤": "Legit Nightclub",
+    "🫡": "Legit Missions",
+    "🔫": "Legit Gunrunner",
+    "🏎️": "Legit Races",
+    "🏟️": "Legit Arena",
+    "👔": "Legit CEO/Agency",
+    "😇": "Legit Helper",
+    "🤝": "Legit Crew Lobby"
+}
+
+commands_data = {
+    "heist": "💰",
+    "mc": "🏍️",
+    "nightclub": "🎤",
+    "missions": "🫡",
+    "gunrunner": "🔫",
+    "ceo": "👔",
+    "lobby": "🤝",
+    "races": "🏎️",
+    "arena": "🏟️",
+    "helper": "😇"
+}
+
+base_reminders = (
+    "✨ Be polite, ask nicely, and don’t *spam **__OR__** dm*.\n"
+    "❗ If someone says “no” or “not yet”, respect it.\n"
+    "🙏 Nobody is obligated to help – being annoying won’t work."
+)
+
+special_intro = (
+    "👉 *BIG RULE:* No messing with others during their sales/missions — griefers will face consequences.\n"
+    "👥 *IMPORTANT:* The host will NOT add you. YOU must add them in-game so they can invite you to the lobby.\n"
+    "🔈 Jump in the voice chat if you can (even just to listen).\n\n"
+)
+
+# ====== EVENTS ======
+@bot.event
+async def on_ready():
+    print(f"✅ CoachKev is online as {bot.user}")
+    for guild in bot.guilds:
+        channel = discord.utils.get(guild.text_channels, name="general")
+        if channel:
+            embed = discord.Embed(
+                title="🧢 CoachKev Notification Roles",
+                description="React below to get pinged for legit activities:\n" +
+                            "\n".join([f"{emoji} {role}" for emoji, role in roles_data.items()]),
+                color=0x00FF00
+            )
+            embed.set_footer(text="Remove your reaction to remove the role.")
+            message = await channel.send(embed=embed)
+            for emoji in roles_data.keys():
+                await message.add_reaction(emoji)
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.member.bot:
+        return
+    guild = bot.get_guild(payload.guild_id)
+    role_name = roles_data.get(str(payload.emoji))
+    if role_name:
+        role = discord.utils.get(guild.roles, name=role_name)
+        if role:
+            await payload.member.add_roles(role)
+            print(f"✅ Added role {role_name} to {payload.member.display_name}")
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    guild = bot.get_guild(payload.guild_id)
+    member = await guild.fetch_member(payload.user_id)
+    role_name = roles_data.get(str(payload.emoji))
+    if role_name:
+        role = discord.utils.get(guild.roles, name=role_name)
+        if role:
+            await member.remove_roles(role)
+            print(f"❌ Removed role {role_name} from {member.display_name}")
+
+# ====== COMMANDS ======
+async def send_legit_embed(ctx, topic):
+    emoji = commands_data.get(topic)
+    helper_role = discord.utils.get(ctx.guild.roles, name="Legit Helper")
+    helpers_mention = ""
+    if topic in ['heist', 'mc', 'nightclub', 'missions', 'gunrunner', 'ceo'] and helper_role:
+        helpers_mention = f"<@&{helper_role.id}> "
+
+    if emoji:
+        if topic == 'helper':
+            title = f"{emoji} LEGIT HELPERS CALLOUT!"
+            description = (
+                f"{ctx.author.mention} is sending a callout to all *LEGIT HELPERS*!\n"
+                "You're one of the awesome people who help make this community a safe, fun place.\n"
+                "Add the host in-game so they can invite you to their lobby and help get some *legit* work done!\n\n"
+                "Members have been reminded of the following:\n"
+                f"{base_reminders}"
+            )
+        elif topic == 'races':
+            title = f"{emoji} LEGIT RACES!"
+            description = (
+                f"{ctx.author.mention} is hosting some legit races!\n"
+                "CoachKev says: Let’s get those engines roaring!\n"
+                "Anyone keen to tear up the streets in some *legit races*?\n"
+                "Add the host in-game so they can invite you to the lobby and let’s hit the track!"
+            )
+        elif topic == 'arena':
+            title = f"{emoji} LEGIT ARENA WARS!"
+            description = (
+                f"{ctx.author.mention} is hosting some legit arena action!\n"
+                "CoachKev here — the arena’s open for business!\n"
+                "Anyone want to battle it out in some *legit Arena Wars*?\n"
+                "Add the host in-game so they can invite you to the lobby and let’s roll!"
+            )
+        elif topic == 'lobby':
+            title = f"{emoji} LEGIT CREW LOBBY!"
+            description = (
+                f"{ctx.author.mention} is hosting a legit crew lobby session.\n"
+                f"{special_intro}{base_reminders}"
+            )
+        else:
+            title = f"{emoji} LEGIT {topic.upper()} HELP CALLOUT!"
+            description = (
+                f"{ctx.author.mention} is hosting a legit {topic} session.\n"
+                f"{special_intro}{base_reminders}"
+            )
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=0x00FF00
+        )
+        embed.set_image(url="https://i.imgur.com/XGY3oCf.png")
+        await ctx.send(content=helpers_mention, embed=embed, allowed_mentions=discord.AllowedMentions(roles=True))
+
+        if topic in ['heist', 'mc', 'nightclub', 'missions', 'gunrunner', 'ceo']:
+            await send_legit_embed(ctx, 'helper')
+    else:
+        await ctx.send("⚠️ Sorry, that’s not a recognised legit command. Try !legithelp to see what’s available.")
+
+@bot.command()
+async def legitheist(ctx):
+    await send_legit_embed(ctx, 'heist')
+
+@bot.command()
+async def legitmc(ctx):
+    await send_legit_embed(ctx, 'mc')
+
+@bot.command()
+async def legitnightclub(ctx):
+    await send_legit_embed(ctx, 'nightclub')
+
+@bot.command()
+async def legitmissions(ctx):
+    await send_legit_embed(ctx, 'missions')
+
+@bot.command()
+async def legitgunrunner(ctx):
+    await send_legit_embed(ctx, 'gunrunner')
+
+@bot.command()
+async def legitceo(ctx):
+    await send_legit_embed(ctx, 'ceo')
+
+@bot.command()
+async def legitlobby(ctx):
+    await send_legit_embed(ctx, 'lobby')
+
+@bot.command()
+async def legitraces(ctx):
+    await send_legit_embed(ctx, 'races')
+
+@bot.command()
+async def legitarena(ctx):
+    await send_legit_embed(ctx, 'arena')
+
+@bot.command()
+async def legithelper(ctx):
+    await send_legit_embed(ctx, 'helper')
+
+@bot.command()
+async def legithelp(ctx):
+    help_text = "**🧠 CoachKev – Legit Commands List**\n\n"
+    for command, emoji in commands_data.items():
+        help_text += f"!legit{command} → {emoji} Legit {command.capitalize()}\n"
+    help_text += "\n✅ !legitdone → End session ping to all Legit roles"
+    help_text += "\n🧠 !legithelp → Shows this help message"
+    await ctx.send(help_text)
+
+@bot.command()
+async def legitdone(ctx):
+    mention_list = [role for role in ctx.guild.roles if role.name.startswith("Legit")]
+    mentions = " ".join([role.mention for role in mention_list])
+    await ctx.send(f"✅ {ctx.author.mention} has ended their *legit session*. Thanks for helping out!\n{mentions}")
+
+# ====== START BOT + WEB SERVER ======
+keep_alive()
+bot.run(os.getenv("DISCORD_BOT_TOKEN"))
